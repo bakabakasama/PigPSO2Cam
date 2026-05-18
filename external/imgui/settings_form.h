@@ -6,9 +6,9 @@
 #include "imgui_internal.h"
 #include <string>
 #include <sstream>
-#include "../Camera.h"
+#include "../../src/Camera.h"
 
-#include "../PSO2CameraTool.hpp"
+#include "../../src/PSO2CameraTool.hpp"
 
 typedef HRESULT(__stdcall* pso2hDoLua)(const char* a1);
 static pso2hDoLua _executeLua = 0;
@@ -67,7 +67,6 @@ static bool adjustFovy() {
 
 static void draw_menu(bool* status)
 {
-
 	ImGui_ImplDX9_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();

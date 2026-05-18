@@ -13,7 +13,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <XInput.h>
+//#include <xinput.h>
 #include <tchar.h>
 
 // CHANGELOG
@@ -148,12 +148,13 @@ static void ImGui_ImplWin32_UpdateMousePos()
 }
 
 #ifdef _MSC_VER
-#pragma comment(lib, "xinput")
+//#pragma comment(lib, "xinput")
 #endif
 
 // Gamepad navigation mapping
 static void ImGui_ImplWin32_UpdateGamepads()
 {
+/*
 	ImGuiIO& io = ImGui::GetIO();
 	memset(io.NavInputs, 0, sizeof(io.NavInputs));
 	if ((io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad) == 0)
@@ -196,6 +197,7 @@ static void ImGui_ImplWin32_UpdateGamepads()
 #undef MAP_BUTTON
 #undef MAP_ANALOG
 	}
+*/
 }
 
 void    ImGui_ImplWin32_NewFrame()

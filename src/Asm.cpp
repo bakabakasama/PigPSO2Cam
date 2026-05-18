@@ -229,7 +229,7 @@ DWORD Asm::AobScan(const char Array[], DWORD Memory_Start, DWORD Memory_End) {
 	DWORD MS_Memory;
 	hit = ChartoAob(Array, ByteCode, Mask);
 
-	__try {
+	//__try {
 		for (MS_Memory = Memory_Start; MS_Memory < Memory_End; MS_Memory++) {
 			for (i = 0; i < hit; i++) {
 				if (Mask[i] == TRUE) {
@@ -243,10 +243,10 @@ DWORD Asm::AobScan(const char Array[], DWORD Memory_Start, DWORD Memory_End) {
 				return MS_Memory;
 			}
 		}
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		return 0;
-	}
+	//}
+	//__except (EXCEPTION_EXECUTE_HANDLER) {
+	//	return 0;
+	//}
 	return 0;
 }
 

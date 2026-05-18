@@ -10,7 +10,7 @@
 #ifndef __Asm_H__
 #define __Asm_H__
 
-#include<Windows.h>
+#include <windows.h>
 
 //#pragma comment(lib, "lib/asm.lib")
 

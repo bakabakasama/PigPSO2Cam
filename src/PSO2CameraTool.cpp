@@ -1,14 +1,16 @@
 #pragma once
 #include "PSO2CameraTool.hpp"
 
-#include <detours.h>
+#include <MinHook.h>
 #include <d3d9.h>
-#include <D3dx9core.h>
+#include <d3dx9core.h>
 #include "Asm.h"
-#include "imgui/settings_form.h"
+#include "../external/imgui/settings_form.h"
 
 
 
+typedef void (*pso2hLogLine_t)(const char* format, ...);
+pso2hLogLine_t pso2hLogLine = nullptr;
 
 bool m_bCreated = false;
 bool wndproc_found = false;
@@ -41,12 +43,13 @@ uintptr_t cameraNearCullAddy;
 
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam) || (MENU_DISPLAYING))
-	{
-		if (MENU_DISPLAYING && msg == WM_KEYDOWN && wParam==VK_ESCAPE) {
-			MENU_DISPLAYING = false;
-		}
+	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
 		return true;
+
+	if (MENU_DISPLAYING)
+	{
+		if ((msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || (msg >= WM_KEYFIRST && msg <= WM_KEYLAST))
+			return true;
 	}
 
 	return CallWindowProc(game_wndproc, hWnd, msg, wParam, lParam);
@@ -84,15 +87,22 @@ HRESULT __stdcall hkEndScene(LPDIRECT3DDEVICE9 Device)
 
 		DWORD farCullScan = AobScan(cameraFarCullAob);
 		if (farCullScan)
+		{
 			cameraFarCullJna = farCullScan;
+			if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] Found camera far cull: %p", (void*)cameraFarCullJna);
+		}
 		DWORD objectCullScan = AobScan(cameraFarCullObjectsAob);
 		if (objectCullScan) {
 			cameraFarCullObjectJe = objectCullScan;
 			cameraFarCullObjectJe += 0x7;
+			if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] Found object far cull: %p", (void*)cameraFarCullObjectJe);
 		}
 		DWORD nearCullScan = AobScan(cameraNearCullAob);
 		if (nearCullScan)
+		{
 			cameraNearCullAddy = nearCullScan;
+			if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] Found camera near cull: %p", (void*)cameraNearCullAddy);
+		}
 		
 	}
 	if (!wndproc_found) {
@@ -102,13 +112,27 @@ HRESULT __stdcall hkEndScene(LPDIRECT3DDEVICE9 Device)
 			menu_init(game_hwnd, Device);
 
 			wndproc_found = true;
+			if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] Main window found and WndProc hooked.");
 		}
 	}
 
-	if ((GetAsyncKeyState(VK_INSERT) & 1)) { 
+	static bool insert_down = false;
+	bool current_insert = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
+	if (current_insert && !insert_down) {
 		MENU_DISPLAYING = !MENU_DISPLAYING;
+		if (pso2hLogLine) pso2hLogLine(MENU_DISPLAYING ? "[PigPSO2Cam] Displaying menu" : "[PigPSO2Cam] Hiding menu");
 	}
-	if (MENU_DISPLAYING )
+	insert_down = current_insert;
+
+	static bool escape_down = false;
+	bool current_escape = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+	if (current_escape && !escape_down && MENU_DISPLAYING) {
+		MENU_DISPLAYING = false;
+		if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] Hiding menu");
+	}
+	escape_down = current_escape;
+
+	if (MENU_DISPLAYING)
 	{
 		draw_menu(&MENU_DISPLAYING);
 	}
@@ -153,28 +177,36 @@ bool CreateDeviceD3D(HWND hWnd)
 	g_d3dpp.hDeviceWindow = tmpWnd;
 	g_d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;   // Present without vsync, maximum unthrottled framerate
 	if (g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, D3DCREATE_HARDWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice) < 0)
+	{
+		if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] CreateDevice failed.");
 		return false;
+	}
 
 	pVTable = (DWORD_PTR*)g_pd3dDevice;
 	pVTable = (DWORD_PTR*)pVTable[0];
+	if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] D3D dummy device created. pVTable: %p", pVTable);
 	return true;
 }
 
 DWORD WINAPI HookThread()
 {
+	if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] HookThread started.");
 
 	CreateDeviceD3D(game_hwnd);
 	if (!pVTable)
+	{
+		if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] Failed to create D3D dummy device.");
 		return false;
+	}
 	
-	oEndScene = (tEndScene)pVTable[42];
-	oReset = (tReset)pVTable[16];
-	
-	DetourTransactionBegin();
-	DetourUpdateThread(GetCurrentThread());
-	DetourAttach(&(LPVOID&)oEndScene, (PBYTE)hkEndScene);
-	DetourAttach(&(LPVOID&)oReset, (PBYTE)hkReset);
-	DetourTransactionCommit();
+	if (MH_Initialize() == MH_OK)
+	{
+		MH_CreateHook((LPVOID)pVTable[42], (LPVOID)hkEndScene, reinterpret_cast<LPVOID*>(&oEndScene));
+		MH_CreateHook((LPVOID)pVTable[16], (LPVOID)hkReset, reinterpret_cast<LPVOID*>(&oReset));
+		MH_EnableHook(MH_ALL_HOOKS);
+	}
+
+	if (pso2hLogLine) pso2hLogLine("[PigPSO2Cam] MinHook attached for EndScene and Reset.");
 
 	g_pD3D->Release();
 	g_pd3dDevice->Release();
@@ -183,6 +215,14 @@ DWORD WINAPI HookThread()
 }
 
 int Initialize() {
+	HMODULE hPso2Host = GetModuleHandleA("pso2h.dll");
+	if (hPso2Host) {
+		pso2hLogLine = (pso2hLogLine_t)GetProcAddress(hPso2Host, "pso2hLogLine");
+		if (pso2hLogLine) {
+			pso2hLogLine("[PigPSO2Cam] Loaded pso2hLogLine successfully.");
+		}
+	}
+
 	/*while (hmRendDx9Base == NULL)
 	{
 		Sleep(200);
